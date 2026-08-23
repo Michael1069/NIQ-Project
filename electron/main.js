@@ -3,9 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-// Disable GPU disk cache warnings/conflicts on Windows
-app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+// Chromium Windows GPU & Network Safety Flags to prevent process host crash (exit_code=1)
 app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+app.commandLine.appendSwitch('disable-gpu-rasterization');
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('ignore-certificate-errors');
 
 // Load .env configuration
 dotenv.config({ path: path.join(__dirname, '../.env') });
