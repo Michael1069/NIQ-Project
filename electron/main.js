@@ -3,6 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
+// Enforce single instance lock to prevent duplicate process conflicts
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('[Main] Another NIQ HelpDeskAI process is already active. Requesting main instance to show sidebar...');
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // When double clicking .bat or launching again, show/toggle active sidebar
+    toggleSidebar();
+  });
+}
+
 // Disable GPU disk cache warnings/conflicts on Windows
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 app.commandLine.appendSwitch('disable-gpu');
@@ -26,7 +39,7 @@ app.whenReady().then(() => {
   createSidebarWindow();
   createSystemTray();
 
-  // Register robust suite of global hotkeys (Ctrl+Alt+H, Alt+Shift+H, Ctrl+Shift+H, F9, Alt+H)
+  // Register suite of global hotkeys (Ctrl+Alt+H, Alt+Shift+H, Ctrl+Shift+H, F9, Alt+H, Ctrl+Alt+A)
   const shortcutsToRegister = [
     'CommandOrControl+Alt+H',
     'Alt+Shift+H',
@@ -39,10 +52,10 @@ app.whenReady().then(() => {
   shortcutsToRegister.forEach(shortcut => {
     try {
       const isReg = globalShortcut.register(shortcut, () => {
-        console.log(`[GlobalHotkey] Triggered by shortcut: ${shortcut}`);
+        console.log(`[GlobalHotkey] Hotkey triggered: ${shortcut}`);
         toggleSidebar();
       });
-      console.log(`[GlobalHotkey] Registered '${shortcut}': ${isReg ? 'SUCCESS' : 'FAILED (Key reserved by another app)'}`);
+      console.log(`[GlobalHotkey] Registered '${shortcut}': ${isReg ? 'SUCCESS' : 'RESERVED BY ANOTHER APP'}`);
     } catch (err) {
       console.error(`[GlobalHotkey] Failed to register '${shortcut}':`, err.message);
     }

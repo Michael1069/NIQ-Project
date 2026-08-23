@@ -26,7 +26,7 @@ function createSidebarWindow() {
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: false,
-    show: true, // Show window on startup
+    show: true,
     backgroundColor: '#F4F6F9',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -36,7 +36,6 @@ function createSidebarWindow() {
     }
   });
 
-  // Load React app URL (built dist/index.html or Vite dev server)
   const distPath = path.join(__dirname, '../dist/index.html');
   if (fs.existsSync(distPath)) {
     mainWindow.loadFile(distPath);
@@ -58,7 +57,7 @@ function createSidebarWindow() {
 }
 
 /**
- * Toggle OS Sidebar Visibility with right-edge animation
+ * Toggle OS Sidebar Visibility with Hotkey Show / Minimize / Hide
  */
 function toggleSidebar() {
   if (!mainWindow) {
@@ -67,8 +66,14 @@ function toggleSidebar() {
   }
 
   if (mainWindow.isVisible()) {
-    mainWindow.hide();
-    isVisible = false;
+    if (mainWindow.isFocused()) {
+      mainWindow.hide();
+      isVisible = false;
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+      isVisible = true;
+    }
   } else {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
@@ -100,16 +105,11 @@ function createSystemTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'NIQ HelpDeskAI (Active)',
-      enabled: false
-    },
-    { type: 'separator' },
-    {
-      label: 'Open Troubleshooting Side Panel',
+      label: 'Open NIQ HelpDeskAI (F9 / Ctrl+Shift+H)',
       click: () => toggleSidebar()
     },
     {
-      label: 'Toggle Execution Policy (Auto / Manual)',
+      label: 'Toggle Policy (Auto/Manual)',
       click: () => {
         if (mainWindow) {
           mainWindow.webContents.send('toggle-policy');
@@ -118,8 +118,9 @@ function createSystemTray() {
     },
     { type: 'separator' },
     {
-      label: 'Exit',
+      label: 'Exit Enterprise Software',
       click: () => {
+        mainWindow = null;
         tray.destroy();
         process.exit(0);
       }
@@ -127,7 +128,10 @@ function createSystemTray() {
   ]);
 
   tray.setContextMenu(contextMenu);
-  tray.on('click', () => toggleSidebar());
+
+  tray.on('click', () => {
+    toggleSidebar();
+  });
 }
 
 function getMainWindow() {
