@@ -16,7 +16,6 @@ const { executeAuthorizedCommand } = require('./commandGateway');
 const { analyzeVisionSnapshot, chatWithReasoningAgent } = require('./groqClient');
 const sessionStore = require('./sessionStore');
 
-// Local settings store
 let appSettings = {
   groqVisionApiKey: process.env.GROQ_VISION_API_KEY || '',
   groqReasoningApiKey: process.env.GROQ_REASONING_API_KEY || '',
@@ -27,7 +26,6 @@ app.whenReady().then(() => {
   createSidebarWindow();
   createSystemTray();
 
-  // Register Global Hotkeys to trigger NIQ Sidebar (Ctrl+Alt+H or Alt+Shift+H)
   try {
     globalShortcut.register('CommandOrControl+Alt+H', () => {
       toggleSidebar();
@@ -39,7 +37,6 @@ app.whenReady().then(() => {
     console.error('Failed to register global hotkey:', err);
   }
 
-  // Handle IPC Requests
   ipcMain.handle('capture-workspace', async () => {
     const snapshot = await captureActiveWorkspace();
     sessionStore.setSnapshot(snapshot);
@@ -53,17 +50,16 @@ app.whenReady().then(() => {
       missingPackage: result.missingPackage
     });
 
-    // Add Vision observation message to chat memory
     sessionStore.addMessage('vision', result.textAnalysis, {
       missingPackage: result.missingPackage,
       detectedError: result.detectedError
     });
 
-    // Trigger initial reasoning turn
+    // Request single reasoning turn
     const session = sessionStore.getSession();
     const reasoning = await chatWithReasoningAgent(
       session.messages,
-      "Summarize the issue and propose an authorized fix if required.",
+      "Summarize the workspace analysis.",
       { missingPackage: result.missingPackage, detectedError: result.detectedError },
       appSettings.groqReasoningApiKey
     );
@@ -82,11 +78,9 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('send-chat-message', async (event, messageText) => {
-    // Save user message to session memory
     sessionStore.addMessage('user', messageText);
     const session = sessionStore.getSession();
 
-    // Call Reasoning Agent with session history
     const reasoning = await chatWithReasoningAgent(
       session.messages,
       messageText,
@@ -94,7 +88,6 @@ app.whenReady().then(() => {
       appSettings.groqReasoningApiKey
     );
 
-    // Save agent response to session memory
     const agentMsg = sessionStore.addMessage('agent', reasoning.textResponse, {
       actionProposal: reasoning.actionProposal
     });

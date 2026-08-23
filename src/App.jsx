@@ -10,12 +10,12 @@ export default function App() {
   const [isIdle, setIsIdle] = useState(false);
   const [snapshot, setSnapshot] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [session, setSession] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(null);
 
-  // Load app settings and session store on startup
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI.getSettings().then((s) => {
@@ -72,7 +72,7 @@ export default function App() {
 
   // Step 2: Confirm snapshot & trigger Vision Analysis
   const handleConfirmSnapshot = async () => {
-    if (!snapshot) return;
+    if (!snapshot || isAnalyzing) return;
     setIsAnalyzing(true);
 
     try {
@@ -86,7 +86,7 @@ export default function App() {
 
         setSession(res.session);
 
-        if (policy === 'AUTO' && res.reasoning?.actionProposal) {
+        if (policy === 'AUTO' && res.reasoning?.actionProposal && !isExecuting) {
           handleExecuteCommand(res.reasoning.actionProposal);
         }
       }
@@ -99,13 +99,14 @@ export default function App() {
 
   // Step 3: Interactive Chat Message Handler
   const handleSendMessage = async (userMessage) => {
+    if (isAnalyzing) return;
     setIsAnalyzing(true);
     try {
       if (window.electronAPI) {
         const res = await window.electronAPI.sendChatMessage(userMessage);
         setSession(res.session);
 
-        if (policy === 'AUTO' && res.actionProposal) {
+        if (policy === 'AUTO' && res.actionProposal && !isExecuting) {
           handleExecuteCommand(res.actionProposal);
         }
       }
@@ -118,8 +119,8 @@ export default function App() {
 
   // Step 4: Execute Command via Authorized Command Gateway
   const handleExecuteCommand = async (actionToRun) => {
-    if (!actionToRun) return;
-    setIsAnalyzing(true);
+    if (!actionToRun || isExecuting) return;
+    setIsExecuting(true);
     try {
       if (window.electronAPI) {
         await window.electronAPI.executeCommand({
@@ -133,7 +134,7 @@ export default function App() {
     } catch (err) {
       console.error('Error executing command:', err);
     } finally {
-      setIsAnalyzing(false);
+      setIsExecuting(false);
     }
   };
 
@@ -141,13 +142,17 @@ export default function App() {
     setIsConfirmed(true);
   };
 
-  const handleReinvestigate = async () => {
+  const handleStartNewSession = async () => {
     if (window.electronAPI) {
       const sess = await window.electronAPI.clearSession();
       setSession(sess);
     }
     setSnapshot(null);
     setIsConfirmed(false);
+  };
+
+  const handleReinvestigate = async () => {
+    await handleStartNewSession();
     handleScanWorkspace();
   };
 
@@ -173,7 +178,6 @@ export default function App() {
         onCloseSidebar={handleCloseSidebar}
       />
 
-      {/* Single Unified Chat Stream Container */}
       <div className="niq-content-area" style={{ padding: 10, display: 'flex', flexDirection: 'column' }}>
         <ChatContainer
           session={session}
@@ -183,9 +187,11 @@ export default function App() {
           onConfirmSnapshot={handleConfirmSnapshot}
           onConfirmResolved={handleConfirmResolved}
           onReinvestigate={handleReinvestigate}
+          onStartNewSession={handleStartNewSession}
           snapshot={snapshot}
           isScanning={isScanning}
           isAnalyzing={isAnalyzing}
+          isExecuting={isExecuting}
           isConfirmed={isConfirmed}
           policy={policy}
         />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, User, Send, Search, CheckCircle2, RefreshCw, Zap, Terminal, XCircle, Camera, AlertCircle } from 'lucide-react';
+import { Bot, User, Send, Search, CheckCircle2, RefreshCw, Zap, Terminal, XCircle, Camera, RotateCcw } from 'lucide-react';
 
 export default function ChatContainer({
   session,
@@ -9,9 +9,11 @@ export default function ChatContainer({
   onConfirmSnapshot,
   onConfirmResolved,
   onReinvestigate,
+  onStartNewSession,
   snapshot,
   isScanning,
   isAnalyzing,
+  isExecuting,
   isConfirmed,
   policy
 }) {
@@ -20,7 +22,7 @@ export default function ChatContainer({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [session?.messages, snapshot, isAnalyzing, isConfirmed]);
+  }, [session?.messages, snapshot, isAnalyzing, isExecuting, isConfirmed]);
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -55,7 +57,7 @@ export default function ChatContainer({
             <Bot size={11} color="#0052FF" /> NIQ Assistant
           </span>
           <div style={{ background: '#FFFFFF', color: '#0A192F', borderRadius: '2px 14px 14px 14px', padding: '12px 14px', fontSize: 12, lineHeight: 1.5, border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', maxWidth: '94%', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <p>
+            <p style={{ margin: 0 }}>
               Hello! I am NIQ HelpDeskAI, monitoring <strong>{session.systemId}</strong>. What would you like to troubleshoot today?
             </p>
 
@@ -137,7 +139,7 @@ export default function ChatContainer({
               {msg.text}
 
               {/* Inline Executable Action Proposal */}
-              {msg.actionProposal && (
+              {msg.actionProposal && !msg.executionResult && (
                 <div style={{ marginTop: 10, background: '#F8FAFC', borderRadius: 10, padding: 10, border: '1px solid #CBD5E1', color: '#0A192F' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#0052FF', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                     <Terminal size={12} /> Proposed Command Action
@@ -152,10 +154,11 @@ export default function ChatContainer({
                   <button
                     className="niq-btn-primary"
                     onClick={() => onExecuteCommand(msg.actionProposal)}
+                    disabled={isExecuting}
                     style={{ width: '100%', padding: '8px 12px', fontSize: 12 }}
                   >
                     <Zap size={13} />
-                    {policy === 'AUTO' ? 'Running Command Autonomously...' : '⚡ APPROVE & EXECUTE NOW'}
+                    {isExecuting ? 'Executing Command...' : policy === 'AUTO' ? 'Running Command Autonomously...' : '⚡ APPROVE & EXECUTE NOW'}
                   </button>
                 </div>
               )}
@@ -183,8 +186,21 @@ export default function ChatContainer({
             </span>
 
             {isConfirmed ? (
-              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '2px 14px 14px 14px', padding: 12, width: '94%', color: '#065F46', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>
-                🎉 Ticket #{session.ticketId} Closed — Issue Resolved!
+              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '2px 14px 14px 14px', padding: 12, width: '94%', color: '#065F46', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontWeight: 700, textAlign: 'center' }}>
+                  🎉 Ticket #{session.ticketId} Resolved & Audit Log Saved!
+                </div>
+                <p style={{ fontSize: 11, color: '#047857', margin: 0, textAlign: 'center' }}>
+                  What would you like to do next?
+                </p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="niq-btn-secondary" onClick={onStartNewSession} style={{ flex: 1, padding: '8px 10px', fontSize: 11, background: '#FFFFFF', color: '#065F46', borderColor: '#A7F3D0' }}>
+                    <RotateCcw size={12} /> Start New Session
+                  </button>
+                  <button className="niq-btn-primary" onClick={onScanWorkspace} style={{ flex: 1, padding: '8px 10px', fontSize: 11, background: '#059669' }}>
+                    <Camera size={12} /> Scan Screen Now
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={{ background: '#FFFFFF', borderRadius: '2px 14px 14px 14px', padding: 12, border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', maxWidth: '94%', display: 'flex', flexDirection: 'column', gap: 8 }}>
