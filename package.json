@@ -1,0 +1,66 @@
+{
+  "name": "niq-helpdesk-ai",
+  "version": "1.0.0",
+  "description": "NIQ HelpDeskAI - Enterprise Autonomous IT Support Desktop Software",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron": "electron .",
+    "start": "electron .",
+    "pack": "vite build && electron-builder --dir",
+    "dist": "vite build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.nielseniq.helpdeskai",
+    "productName": "NIQ HelpDeskAI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      ".env"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NIQ HelpDeskAI"
+    }
+  },
+  "keywords": [
+    "helpdesk",
+    "ai",
+    "nielseniq",
+    "groq",
+    "electron",
+    "troubleshooting"
+  ],
+  "author": "NielsenIQ Team",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.5",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.1.6",
+    "wait-on": "^7.2.0"
+  }
+}

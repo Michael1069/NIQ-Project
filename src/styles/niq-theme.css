@@ -1,0 +1,367 @@
+:root {
+  --niq-blue: #0052FF;
+  --niq-blue-hover: #0043D6;
+  --niq-blue-light: #EBF2FF;
+  --niq-navy: #0A192F;
+  --niq-navy-muted: #475569;
+  --niq-bg: #F4F6F9;
+  --niq-card-bg: #FFFFFF;
+  --niq-border: #E2E8F0;
+  --niq-success: #10B981;
+  --niq-warning: #F59E0B;
+  --niq-error: #EF4444;
+  --niq-radius-lg: 20px;
+  --niq-radius-md: 14px;
+  --niq-radius-sm: 8px;
+  --niq-shadow: 0 10px 25px -5px rgba(0, 82, 255, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--niq-bg);
+  color: var(--niq-navy);
+  overflow-x: hidden;
+  height: 100vh;
+  width: 100vw;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Sidebar Container */
+.niq-sidebar-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: var(--niq-bg);
+  border-left: 1px solid rgba(0, 82, 255, 0.15);
+  box-shadow: -10px 0 30px rgba(10, 25, 47, 0.08);
+}
+
+/* Header Bar */
+.niq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--niq-card-bg);
+  border-bottom: 1px solid var(--niq-border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.niq-logo-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.niq-logo-badge {
+  background: var(--niq-blue);
+  color: #FFFFFF;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 18px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: -0.5px;
+}
+
+.niq-app-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.niq-app-name {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--niq-navy);
+  line-height: 1.2;
+}
+
+.niq-tagline {
+  font-size: 11px;
+  color: var(--niq-navy-muted);
+  font-weight: 500;
+}
+
+/* Header Controls */
+.niq-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Policy Toggle Switch */
+.niq-policy-switch {
+  display: flex;
+  align-items: center;
+  background: #F1F5F9;
+  padding: 3px;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+}
+
+.niq-policy-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--niq-navy-muted);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.niq-policy-btn.active-auto {
+  background: var(--niq-blue);
+  color: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 82, 255, 0.3);
+}
+
+.niq-policy-btn.active-manual {
+  background: var(--niq-navy);
+  color: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(10, 25, 47, 0.3);
+}
+
+.niq-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--niq-navy-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.niq-icon-btn:hover {
+  background: #F1F5F9;
+  color: var(--niq-navy);
+}
+
+/* Content Area */
+.niq-content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* NIQ Metric Banner (Matching Screenshot Styling) */
+.niq-metric-banner {
+  background: var(--niq-card-bg);
+  border-radius: var(--niq-radius-lg);
+  padding: 14px;
+  box-shadow: var(--niq-shadow);
+  border: 1px solid var(--niq-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.niq-metric-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #F8FAFC;
+  padding: 10px 12px;
+  border-radius: var(--niq-radius-md);
+  border: 1px solid #EDF2F7;
+}
+
+.niq-metric-pill {
+  background: var(--niq-blue);
+  color: #FFFFFF;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 16px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  min-width: 68px;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 82, 255, 0.25);
+}
+
+.niq-metric-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--niq-navy);
+  line-height: 1.3;
+}
+
+/* White Card Containers */
+.niq-card {
+  background: var(--niq-card-bg);
+  border-radius: var(--niq-radius-lg);
+  padding: 16px;
+  box-shadow: var(--niq-shadow);
+  border: 1px solid var(--niq-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.niq-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.niq-card-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--niq-navy);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.niq-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.niq-badge-blue {
+  background: var(--niq-blue-light);
+  color: var(--niq-blue);
+}
+
+.niq-badge-success {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.niq-badge-warning {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Primary Action Buttons */
+.niq-btn-primary {
+  width: 100%;
+  background: var(--niq-blue);
+  color: #FFFFFF;
+  border: none;
+  padding: 12px 18px;
+  border-radius: var(--niq-radius-md);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(0, 82, 255, 0.3);
+  transition: all 0.2s ease;
+}
+
+.niq-btn-primary:hover {
+  background: var(--niq-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 82, 255, 0.4);
+}
+
+.niq-btn-primary:active {
+  transform: translateY(0);
+}
+
+.niq-btn-secondary {
+  width: 100%;
+  background: #F1F5F9;
+  color: var(--niq-navy);
+  border: 1px solid #CBD5E1;
+  padding: 10px 16px;
+  border-radius: var(--niq-radius-md);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.niq-btn-secondary:hover {
+  background: #E2E8F0;
+}
+
+/* Snapshot Preview Card */
+.niq-snapshot-frame {
+  width: 100%;
+  border-radius: var(--niq-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--niq-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.niq-snapshot-img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 82, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 82, 255, 0);
+  }
+}
+
+.niq-pulse-btn {
+  animation: pulseGlow 2s infinite;
+}
