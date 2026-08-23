@@ -84,7 +84,7 @@ function getActiveWindowInfo() {
 
 /**
  * Live Environment & Traceback Diagnostic Scanner:
- * Runs active python scripts or import probes to capture real error tracebacks on the system
+ * Searches user directory ($env:USERPROFILE, current workspace, Desktop) for active .py scripts and runs python import checks
  */
 function scanActiveWorkspaceDiagnostics() {
   return new Promise((resolve) => {
@@ -92,32 +92,38 @@ function scanActiveWorkspaceDiagnostics() {
       return resolve({ observedError: null, missingPackage: null });
     }
 
-    // PowerShell script to find active python files or test python script execution for tracebacks
+    // PowerShell script to find active python files in user directory and test python script execution for tracebacks
     const psScript = `
-      $pyFiles = Get-ChildItem -Path . -Filter "*.py" -ErrorAction SilentlyContinue | Select-Object -First 2
+      $pyFiles = @()
+      $pyFiles += Get-ChildItem -Path "$env:USERPROFILE" -Filter "*.py" -ErrorAction SilentlyContinue | Select-Object -First 5
+      $pyFiles += Get-ChildItem -Path "$env:USERPROFILE\\Desktop" -Filter "*.py" -ErrorAction SilentlyContinue | Select-Object -First 5
+      $pyFiles += Get-ChildItem -Path . -Filter "*.py" -ErrorAction SilentlyContinue | Select-Object -First 5
+
       $errorMsg = ""
       $missingPkg = ""
 
       foreach ($file in $pyFiles) {
-        $res = python $file.FullName 2>&1 | Out-String
-        if ($res -match "ImportError: (.*) is not installed") {
-          $errorMsg = $Matches[0]
-          if ($res -match "'(pydantic\\[.*?\\]|[^']*)'") {
-            $missingPkg = $Matches[1]
-          } else {
-            $missingPkg = "email-validator"
+        if ($file.FullName) {
+          $res = python "$($file.FullName)" 2>&1 | Out-String
+          if ($res -match "ImportError: (.*) is not installed") {
+            $errorMsg = $Matches[0]
+            if ($res -match "'(pydantic\\[.*?\\]|[^']*)'") {
+              $missingPkg = $Matches[1]
+            } else {
+              $missingPkg = "email-validator"
+            }
+            break
           }
-          break
-        }
-        if ($res -match "ModuleNotFoundError: No module named '(.*)'") {
-          $errorMsg = $Matches[0]
-          $missingPkg = $Matches[1]
-          break
+          if ($res -match "ModuleNotFoundError: No module named '(.*)'") {
+            $errorMsg = $Matches[0]
+            $missingPkg = $Matches[1]
+            break
+          }
         }
       }
 
       if (-not $missingPkg) {
-        # Probe common packages
+        # Direct python import probes
         $pkgs = @("email-validator", "pydantic", "pandas", "requests", "fastapi")
         foreach ($pkg in $pkgs) {
           $test = python -c "import $pkg" 2>&1 | Out-String
@@ -138,15 +144,14 @@ function scanActiveWorkspaceDiagnostics() {
 
     const encodedCmd = Buffer.from(psScript, 'utf16le').toString('base64');
 
-    exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { timeout: 6000 }, (err, stdout) => {
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { timeout: 8000 }, (err, stdout) => {
       if (stdout && stdout.includes('ERROR:')) {
         const line = stdout.trim();
         const errorPart = line.split('ERROR:')[1] || '';
         const parts = errorPart.split('|PKG:');
         const observedError = parts[0] || 'ImportError: Package missing';
-        let missingPkg = parts[1] || 'pydantic';
+        let missingPkg = parts[1] || 'email-validator';
 
-        // Clean quotes or brackets if present (e.g. 'pydantic[email]' -> pydantic[email])
         missingPkg = missingPkg.replace(/['"]/g, '').trim();
 
         return resolve({

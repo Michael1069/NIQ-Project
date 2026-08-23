@@ -24,7 +24,7 @@ function cleanThinkingContent(text) {
 }
 
 /**
- * Call Groq API Vision & Context Analysis Engine with Rate-Limit Model Cascade
+ * Call Groq API Vision & Context Analysis Engine with Rate-Limit Protection & Direct Probe Detection
  */
 async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
   const primaryApiKey = apiKey || process.env.GROQ_VISION_API_KEY || process.env.GROQ_REASONING_API_KEY;
@@ -47,6 +47,7 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
     errorMsg = "ModuleNotFoundError: No module named 'pandas'";
   }
 
+  // Fast-path: Direct environment probe diagnosis (Zero Groq API rate limit overhead)
   if (detectedMissingPkg) {
     return {
       success: true,
@@ -60,7 +61,6 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
     return getFallbackNaturalVision(userPrompt);
   }
 
-  // Model cascade list to survive TPM rate limits
   const modelCascade = ['groq/compound', 'groq/compound-mini', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b'];
 
   for (const modelName of modelCascade) {
@@ -79,15 +79,13 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
           }
         ],
         temperature: 0.1,
-        max_tokens: 300 // Token optimization to avoid Groq TPM limits
+        max_tokens: 250
       };
 
       const responseText = await sendGroqHttpRequest('https://api.groq.com/openai/v1/chat/completions', payload, primaryApiKey);
       const parsed = JSON.parse(responseText);
       const rawContent = parsed.choices[0].message.content;
       const cleanOutput = cleanThinkingContent(rawContent);
-
-      console.log(`[GroqClient] ${modelName} Clean Output:\n`, cleanOutput);
 
       const hasImportError = cleanOutput.toLowerCase().includes('email-validator') || cleanOutput.toLowerCase().includes('pydantic');
 
@@ -98,7 +96,7 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
         detectedError: hasImportError ? 'ImportError / Missing Package' : null
       };
     } catch (err) {
-      console.warn(`[GroqClient] Model ${modelName} failed/rate-limited: ${err.message}. Trying next cascade model...`);
+      console.warn(`[GroqClient] Model ${modelName} rate-limited: ${err.message}. Cascading...`);
     }
   }
 
@@ -106,11 +104,25 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
 }
 
 /**
- * Multi-Turn Conversational Reasoning Agent Router with Rate-Limit Model Cascade
+ * Multi-Turn Conversational Reasoning Agent Router
  */
 async function chatWithReasoningAgent(chatHistory, userMessage, contextData, apiKey) {
   const primaryApiKey = apiKey || process.env.GROQ_REASONING_API_KEY || process.env.GROQ_VISION_API_KEY;
   const missingPkg = contextData?.missingPackage || (userMessage && userMessage.toLowerCase().includes('email-validator') ? 'email-validator' : userMessage && userMessage.toLowerCase().includes('pydantic') ? 'pydantic' : null);
+
+  // Fast-path: If missing package is detected, construct proposal instantly (0 API latency, 0 Rate limit)
+  if (missingPkg) {
+    return {
+      textResponse: `I detected that your Python project requires **${missingPkg}**, but it is currently missing from your active environment. I can install it for you using the Authorized Command Gateway.`,
+      actionProposal: {
+        commandName: 'install_package',
+        args: { package: missingPkg },
+        explanation: `Executes 'pip install ${missingPkg}' via Authorized Command Gateway.`,
+        riskLevel: 'LOW',
+        authorized: true
+      }
+    };
+  }
 
   if (!primaryApiKey || primaryApiKey.includes('your_groq')) {
     return getFallbackConversationalResponse(userMessage, missingPkg);
@@ -120,24 +132,12 @@ async function chatWithReasoningAgent(chatHistory, userMessage, contextData, api
 
   const modelCascade = ['groq/compound', 'groq/compound-mini', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b'];
 
-  // Keep last 3 messages only to optimize token usage
-  const recentHistory = chatHistory.slice(-3).map(m => ({
+  const recentHistory = chatHistory.slice(-2).map(m => ({
     role: m.sender === 'user' ? 'user' : 'assistant',
     content: m.text
   }));
 
-  const systemPrompt = `You are the NIQ Enterprise IT Support Reasoning Agent for System SYS-NO-001.
-Respond conversationally. No thinking tags.
-If missing package '${missingPkg || 'email-validator'}' exists, append:
-[[ACTION_PROPOSAL]]
-{
-  "commandName": "install_package",
-  "args": { "package": "${missingPkg || 'email-validator'}" },
-  "explanation": "Installs missing package '${missingPkg || 'email-validator'}' via Authorized Command Gateway.",
-  "riskLevel": "LOW",
-  "authorized": true
-}
-[[END_ACTION_PROPOSAL]]`;
+  const systemPrompt = `You are the NIQ Enterprise IT Support Reasoning Agent for System SYS-NO-001. Respond conversationally. No thinking tags.`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -152,7 +152,7 @@ If missing package '${missingPkg || 'email-validator'}' exists, append:
         model: modelName,
         messages,
         temperature: 0.2,
-        max_tokens: 400
+        max_tokens: 300
       };
 
       const responseText = await sendGroqHttpRequest('https://api.groq.com/openai/v1/chat/completions', payload, primaryApiKey);
@@ -160,33 +160,10 @@ If missing package '${missingPkg || 'email-validator'}' exists, append:
       let rawContent = parsed.choices[0].message.content;
 
       rawContent = cleanThinkingContent(rawContent);
-      console.log(`[GroqClient] ${modelName} Reasoning Output:\n`, rawContent);
-
-      let actionProposal = null;
-      let textResponse = rawContent;
-
-      if (rawContent.includes('[[ACTION_PROPOSAL]]')) {
-        const parts = rawContent.split('[[ACTION_PROPOSAL]]');
-        textResponse = cleanThinkingContent(parts[0]);
-        const actionJsonStr = parts[1].split('[[END_ACTION_PROPOSAL]]')[0].trim();
-        try {
-          actionProposal = JSON.parse(actionJsonStr);
-        } catch (e) {
-          console.error('Failed to parse action proposal JSON', e);
-        }
-      } else if (missingPkg) {
-        actionProposal = {
-          commandName: 'install_package',
-          args: { package: missingPkg },
-          explanation: `Installs missing package '${missingPkg}' via Authorized Command Gateway.`,
-          riskLevel: 'LOW',
-          authorized: true
-        };
-      }
 
       return {
-        textResponse: textResponse || `I recommend installing ${missingPkg || 'the missing package'}.`,
-        actionProposal
+        textResponse: rawContent || "I have analyzed your request. How else can I assist you?",
+        actionProposal: null
       };
     } catch (err) {
       console.warn(`[GroqClient] Reasoning Model ${modelName} error: ${err.message}. Cascading...`);
