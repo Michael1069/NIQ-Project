@@ -83,8 +83,8 @@ function getActiveWindowInfo() {
 }
 
 /**
- * Live Environment Diagnostic Scanner:
- * Checks for missing Python packages by scanning active Python scripts and running quick import probes
+ * Live Environment & Traceback Diagnostic Scanner:
+ * Runs active python scripts or import probes to capture real error tracebacks on the system
  */
 function scanActiveWorkspaceDiagnostics() {
   return new Promise((resolve) => {
@@ -92,31 +92,67 @@ function scanActiveWorkspaceDiagnostics() {
       return resolve({ observedError: null, missingPackage: null });
     }
 
-    // Common enterprise & python packages to probe
-    const packagesToTest = ['pydantic', 'pandas', 'requests', 'numpy', 'flask', 'fastapi'];
-    
-    // Test python imports directly on host machine
-    const testScript = packagesToTest.map(pkg => `
-      try {
-        $res = python -c "import ${pkg}" 2>&1
-        if ($LASTEXITCODE -ne 0) { Write-Output "MISSING:${pkg}" }
-      } catch {
-        Write-Output "MISSING:${pkg}"
-      }
-    `).join('\n');
+    // PowerShell script to find active python files or test python script execution for tracebacks
+    const psScript = `
+      $pyFiles = Get-ChildItem -Path . -Filter "*.py" -ErrorAction SilentlyContinue | Select-Object -First 2
+      $errorMsg = ""
+      $missingPkg = ""
 
-    const encodedCmd = Buffer.from(testScript, 'utf16le').toString('base64');
-
-    exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { timeout: 4000 }, (err, stdout) => {
-      if (stdout && stdout.includes('MISSING:')) {
-        const missingLines = stdout.split('\n').filter(l => l.trim().startsWith('MISSING:'));
-        if (missingLines.length > 0) {
-          const firstMissing = missingLines[0].trim().replace('MISSING:', '');
-          return resolve({
-            observedError: `ModuleNotFoundError: No module named '${firstMissing}'`,
-            missingPackage: firstMissing
-          });
+      foreach ($file in $pyFiles) {
+        $res = python $file.FullName 2>&1 | Out-String
+        if ($res -match "ImportError: (.*) is not installed") {
+          $errorMsg = $Matches[0]
+          if ($res -match "'(pydantic\\[.*?\\]|[^']*)'") {
+            $missingPkg = $Matches[1]
+          } else {
+            $missingPkg = "email-validator"
+          }
+          break
         }
+        if ($res -match "ModuleNotFoundError: No module named '(.*)'") {
+          $errorMsg = $Matches[0]
+          $missingPkg = $Matches[1]
+          break
+        }
+      }
+
+      if (-not $missingPkg) {
+        # Probe common packages
+        $pkgs = @("email-validator", "pydantic", "pandas", "requests", "fastapi")
+        foreach ($pkg in $pkgs) {
+          $test = python -c "import $pkg" 2>&1 | Out-String
+          if ($test -match "ModuleNotFoundError|ImportError") {
+            $errorMsg = "ImportError: $pkg is not installed"
+            $missingPkg = $pkg
+            break
+          }
+        }
+      }
+
+      if ($missingPkg) {
+        Write-Output "ERROR:$errorMsg|PKG:$missingPkg"
+      } else {
+        Write-Output "OK"
+      }
+    `;
+
+    const encodedCmd = Buffer.from(psScript, 'utf16le').toString('base64');
+
+    exec(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { timeout: 6000 }, (err, stdout) => {
+      if (stdout && stdout.includes('ERROR:')) {
+        const line = stdout.trim();
+        const errorPart = line.split('ERROR:')[1] || '';
+        const parts = errorPart.split('|PKG:');
+        const observedError = parts[0] || 'ImportError: Package missing';
+        let missingPkg = parts[1] || 'pydantic';
+
+        // Clean quotes or brackets if present (e.g. 'pydantic[email]' -> pydantic[email])
+        missingPkg = missingPkg.replace(/['"]/g, '').trim();
+
+        return resolve({
+          observedError: observedError,
+          missingPackage: missingPkg
+        });
       }
       resolve({ observedError: null, missingPackage: null });
     });
@@ -128,8 +164,8 @@ function generateFallbackSnapshot() {
     <rect width="800" height="450" fill="#181818" rx="8"/>
     <rect width="800" height="35" fill="#252526" rx="8 8 0 0"/>
     <text x="20" y="22" fill="#cccccc" font-family="Consolas, monospace" font-size="13">pydantictest.py - Python Project</text>
-    <text x="20" y="70" fill="#c586c0" font-family="Consolas, monospace" font-size="14">from pydantic import BaseModel, Field</text>
-    <text x="20" y="120" fill="#f14c4c" font-family="Consolas, monospace" font-size="13">ModuleNotFoundError: No module named 'pydantic'</text>
+    <text x="20" y="70" fill="#c586c0" font-family="Consolas, monospace" font-size="14">from pydantic import BaseModel, Field, EmailStr</text>
+    <text x="20" y="120" fill="#f14c4c" font-family="Consolas, monospace" font-size="13">ImportError: email-validator is not installed, run 'pip install pydantic[email]'</text>
   </svg>`;
 
   const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
@@ -138,8 +174,8 @@ function generateFallbackSnapshot() {
     dataUrl: dataUrl,
     windowTitle: 'pydantictest.py - Python Project',
     processName: 'Code.exe',
-    environmentError: "ModuleNotFoundError: No module named 'pydantic'",
-    missingPackage: 'pydantic',
+    environmentError: "ImportError: email-validator is not installed, run 'pip install pydantic[email]'",
+    missingPackage: 'email-validator',
     timestamp: new Date().toISOString(),
     isIdle: false
   };

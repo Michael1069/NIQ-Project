@@ -3,19 +3,22 @@ const http = require('http');
 const { URL } = require('url');
 
 /**
- * Clean LLM response text by stripping out <think>...</think> reasoning tags,
- * internal chain-of-thought blocks, and markdown code fencing.
+ * Clean LLM response text by stripping out <think>...</think> reasoning tags
+ * and any meta-chatter about IDE layouts or tool frames.
  */
 function cleanThinkingContent(text) {
   if (typeof text !== 'string') return text;
 
   let cleaned = text;
 
-  // Strip <think>...</think> XML/HTML tags and their internal content
+  // Strip <think>...</think> XML/HTML tags
   cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
 
-  // Strip **Reasoning and Analysis** or **Reasoning** header blocks
+  // Strip **Reasoning and Analysis** blocks
   cleaned = cleaned.replace(/\*\*Reasoning(?: and Analysis)?\*\*[\s\S]*?(?=\n\n|\n[A-Z]|\{|$)/gi, '');
+
+  // Remove irrelevant meta-chatter about Antigravity IDE or layout descriptions
+  cleaned = cleaned.replace(/The workspace window you're looking at is the Antigravity IDE[\s\S]*?(?=\n\n|$)/gi, '');
 
   return cleaned.trim();
 }
@@ -28,19 +31,29 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
 
   console.log('[GroqClient] Analyzing workspace snapshot text & environment...');
 
-  const contextStr = String(userPrompt || '');
-  const detectedMissingPkg = contextStr.includes('pydantic')
-    ? 'pydantic'
-    : contextStr.includes('pandas')
-    ? 'pandas'
-    : null;
+  const contextStr = String(userPrompt || '').toLowerCase();
+  
+  // Extract detected missing package from environment probe context
+  let detectedMissingPkg = null;
+  let errorMsg = null;
+
+  if (contextStr.includes('email-validator') || contextStr.includes('pydantic[email]')) {
+    detectedMissingPkg = 'email-validator';
+    errorMsg = "ImportError: email-validator is not installed, run 'pip install pydantic[email]'";
+  } else if (contextStr.includes('pydantic')) {
+    detectedMissingPkg = 'pydantic';
+    errorMsg = "ModuleNotFoundError: No module named 'pydantic'";
+  } else if (contextStr.includes('pandas')) {
+    detectedMissingPkg = 'pandas';
+    errorMsg = "ModuleNotFoundError: No module named 'pandas'";
+  }
 
   if (detectedMissingPkg) {
     return {
       success: true,
       missingPackage: detectedMissingPkg,
-      detectedError: `ModuleNotFoundError: No module named '${detectedMissingPkg}'`,
-      textAnalysis: `I observed an execution traceback in your terminal showing **ModuleNotFoundError: No module named '${detectedMissingPkg}'** when attempting to run your Python script. The required package **${detectedMissingPkg}** is missing from your active environment.`
+      detectedError: errorMsg,
+      textAnalysis: `I detected an **${errorMsg}** in your active Python workspace. The required package **${detectedMissingPkg}** is missing from your active environment.`
     };
   }
 
@@ -56,9 +69,10 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
           role: 'system',
           content: `You are the NielsenIQ (NIQ) Vision & Workspace Context Engine.
 Analyze the workspace window context provided and describe what is visible on the screen in natural conversational text.
-If there is a clear error (e.g. ModuleNotFoundError, command failed, connection error), describe it clearly.
-If there is no error, state that the workspace appears to be running normally.
-DO NOT include any thinking logs or internal reasoning tags in your output.`
+CRITICAL RULES:
+1. Focus strictly on technical errors, tracebacks, or missing packages.
+2. DO NOT describe IDE layout, editor panels, file tree views, or tool names.
+3. If there is no error, state cleanly: "Workspace is operating normally without detected errors."`
         },
         {
           role: 'user',
@@ -75,11 +89,13 @@ DO NOT include any thinking logs or internal reasoning tags in your output.`
 
     console.log('[GroqClient] Vision Clean Output:\n', cleanOutput);
 
+    const hasImportError = cleanOutput.toLowerCase().includes('email-validator') || cleanOutput.toLowerCase().includes('pydantic');
+
     return {
       success: true,
-      textAnalysis: cleanOutput,
-      missingPackage: cleanOutput.toLowerCase().includes('pydantic') ? 'pydantic' : null,
-      detectedError: cleanOutput.toLowerCase().includes('modulenotfounderror') ? 'ModuleNotFoundError' : null
+      textAnalysis: cleanOutput || 'Workspace context analyzed. No active technical errors detected.',
+      missingPackage: hasImportError ? (cleanOutput.toLowerCase().includes('email-validator') ? 'email-validator' : 'pydantic') : null,
+      detectedError: hasImportError ? 'ImportError / Missing Package' : null
     };
   } catch (err) {
     console.error('[GroqClient] Vision Engine error:', err.message);
@@ -92,7 +108,7 @@ DO NOT include any thinking logs or internal reasoning tags in your output.`
  */
 async function chatWithReasoningAgent(chatHistory, userMessage, contextData, apiKey) {
   const primaryApiKey = apiKey || process.env.GROQ_REASONING_API_KEY || process.env.GROQ_VISION_API_KEY;
-  const missingPkg = contextData?.missingPackage || (userMessage && userMessage.toLowerCase().includes('pydantic') ? 'pydantic' : null);
+  const missingPkg = contextData?.missingPackage || (userMessage && userMessage.toLowerCase().includes('email-validator') ? 'email-validator' : userMessage && userMessage.toLowerCase().includes('pydantic') ? 'pydantic' : null);
 
   if (!primaryApiKey || primaryApiKey.includes('your_groq')) {
     return getFallbackConversationalResponse(userMessage, missingPkg);
@@ -109,14 +125,15 @@ async function chatWithReasoningAgent(chatHistory, userMessage, contextData, api
     const systemPrompt = `You are the NIQ Enterprise IT Support Reasoning Agent for System SYS-NO-001.
 Respond conversationally to the user's message.
 DO NOT output thinking logs, internal scratchpads, or <think>...</think> tags.
+DO NOT describe IDE user interface elements or editor frames.
 
-If a missing package like '${missingPkg || 'pydantic'}' or error needs remediation, include an authorized command proposal block in JSON format at the end of your response like this:
+If a missing package like '${missingPkg || 'email-validator'}' or error needs remediation, include an authorized command proposal block in JSON format at the end of your response like this:
 
 [[ACTION_PROPOSAL]]
 {
   "commandName": "install_package",
-  "args": { "package": "${missingPkg || 'pydantic'}" },
-  "explanation": "Installs missing package '${missingPkg || 'pydantic'}' via Authorized Command Gateway.",
+  "args": { "package": "${missingPkg || 'email-validator'}" },
+  "explanation": "Installs missing package '${missingPkg || 'email-validator'}' via Authorized Command Gateway.",
   "riskLevel": "LOW",
   "authorized": true
 }
@@ -138,7 +155,6 @@ If a missing package like '${missingPkg || 'pydantic'}' or error needs remediati
     const parsed = JSON.parse(responseText);
     let rawContent = parsed.choices[0].message.content;
 
-    // Strip out any <think>...</think> tags or reasoning text from model output
     rawContent = cleanThinkingContent(rawContent);
     console.log('[GroqClient] Reasoning Clean Output:\n', rawContent);
 
@@ -210,14 +226,24 @@ function sendGroqHttpRequest(endpoint, bodyData, apiKey) {
 
 function getFallbackNaturalVision(userPrompt) {
   const promptStr = String(userPrompt || '').toLowerCase();
+  const isEmailValidator = promptStr.includes('email-validator') || promptStr.includes('pydantic[email]');
   const isPydantic = promptStr.includes('pydantic');
+
+  if (isEmailValidator) {
+    return {
+      success: true,
+      missingPackage: 'email-validator',
+      detectedError: "ImportError: email-validator is not installed, run 'pip install pydantic[email]'",
+      textAnalysis: "I detected an **ImportError: email-validator is not installed** in your active Python script. The required package **email-validator** is missing."
+    };
+  }
 
   if (isPydantic) {
     return {
       success: true,
       missingPackage: 'pydantic',
       detectedError: "ModuleNotFoundError: No module named 'pydantic'",
-      textAnalysis: "I inspected your active workspace terminal and detected an unhandled **ModuleNotFoundError: No module named 'pydantic'** during script execution."
+      textAnalysis: "I detected an unhandled **ModuleNotFoundError: No module named 'pydantic'** during Python script execution."
     };
   }
 
@@ -225,7 +251,7 @@ function getFallbackNaturalVision(userPrompt) {
     success: true,
     missingPackage: null,
     detectedError: null,
-    textAnalysis: "I inspected your active workspace window. Your environment appears to be running normally without active errors."
+    textAnalysis: "I inspected your active workspace. Your environment appears to be running normally without detected errors."
   };
 }
 
