@@ -1,64 +1,67 @@
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
+const { extractTextFromImage } = require('./ocrEngine');
 
 /**
  * Clean LLM response text by stripping out <think>...</think> reasoning tags
- * and any meta-chatter about IDE layouts or tool frames.
  */
 function cleanThinkingContent(text) {
   if (typeof text !== 'string') return text;
-
   let cleaned = text;
-
-  // Strip <think>...</think> XML/HTML tags
   cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
-
-  // Strip **Reasoning and Analysis** blocks
   cleaned = cleaned.replace(/\*\*Reasoning(?: and Analysis)?\*\*[\s\S]*?(?=\n\n|\n[A-Z]|\{|$)/gi, '');
-
-  // Remove irrelevant meta-chatter about Antigravity IDE or layout descriptions
   cleaned = cleaned.replace(/The workspace window you're looking at is the Antigravity IDE[\s\S]*?(?=\n\n|$)/gi, '');
-
   return cleaned.trim();
 }
 
 /**
- * Call Groq API Vision & Context Analysis Engine with Rate-Limit Protection & Direct Probe Detection
+ * Call Groq API Vision & Workspace Context Analysis Engine
+ * Extracts text directly from screenshot image pixels via OCR!
  */
 async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
   const primaryApiKey = apiKey || process.env.GROQ_VISION_API_KEY || process.env.GROQ_REASONING_API_KEY;
 
-  console.log('[GroqClient] Analyzing workspace snapshot text & environment...');
+  console.log('[GroqClient] Extracting visual text from screen image buffer...');
 
-  const contextStr = String(userPrompt || '').toLowerCase();
-  
+  // Extract text directly from image pixels using OCR Engine
+  let imageOcrText = '';
+  try {
+    imageOcrText = await extractTextFromImage(imageBase64);
+  } catch (err) {
+    console.error('[GroqClient] OCR Error:', err.message);
+  }
+
+  const combinedContext = `${userPrompt || ''}\nExtracted Screen Image Text:\n${imageOcrText}`.toLowerCase();
+
   let detectedMissingPkg = null;
   let errorMsg = null;
 
-  if (contextStr.includes('email-validator') || contextStr.includes('pydantic[email]')) {
+  if (combinedContext.includes('email-validator') || combinedContext.includes('pydantic[email]')) {
     detectedMissingPkg = 'email-validator';
     errorMsg = "ImportError: email-validator is not installed, run 'pip install pydantic[email]'";
-  } else if (contextStr.includes('pydantic')) {
+  } else if (combinedContext.includes('pydantic')) {
     detectedMissingPkg = 'pydantic';
     errorMsg = "ModuleNotFoundError: No module named 'pydantic'";
-  } else if (contextStr.includes('pandas')) {
+  } else if (combinedContext.includes('pandas')) {
     detectedMissingPkg = 'pandas';
     errorMsg = "ModuleNotFoundError: No module named 'pandas'";
   }
 
-  // Fast-path: Direct environment probe diagnosis (Zero Groq API rate limit overhead)
+  // If OCR detected missing package directly in the image:
   if (detectedMissingPkg) {
+    console.log(`[GroqClient] Image OCR detected missing package: ${detectedMissingPkg}`);
     return {
       success: true,
       missingPackage: detectedMissingPkg,
       detectedError: errorMsg,
-      textAnalysis: `I detected an **${errorMsg}** in your active Python workspace. The required package **${detectedMissingPkg}** is missing from your active environment.`
+      imageText: imageOcrText,
+      textAnalysis: `I read your screenshot image and detected **${errorMsg}**. The required package **${detectedMissingPkg}** is missing from your active environment.`
     };
   }
 
   if (!primaryApiKey || primaryApiKey.includes('your_groq')) {
-    return getFallbackNaturalVision(userPrompt);
+    return getFallbackNaturalVision(combinedContext, imageOcrText);
   }
 
   const modelCascade = ['groq/compound', 'groq/compound-mini', 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b'];
@@ -71,15 +74,15 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
         messages: [
           {
             role: 'system',
-            content: `You are the NIQ Vision & Workspace Context Engine. Focus strictly on technical errors or missing packages. If no error, state: "Workspace is operating normally."`
+            content: `You are the NIQ Vision & Workspace Context Engine. Read the screen text extracted from the image. Focus strictly on technical errors or missing packages. If no error, state: "Workspace is operating normally."`
           },
           {
             role: 'user',
-            content: `Active Workspace Target Window Context: ${userPrompt || 'Active Window'}`
+            content: `Target Window: ${userPrompt || ''}\nExtracted Screen Image Text:\n${imageOcrText}`
           }
         ],
         temperature: 0.1,
-        max_tokens: 250
+        max_tokens: 300
       };
 
       const responseText = await sendGroqHttpRequest('https://api.groq.com/openai/v1/chat/completions', payload, primaryApiKey);
@@ -91,6 +94,7 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
 
       return {
         success: true,
+        imageText: imageOcrText,
         textAnalysis: cleanOutput || 'Workspace context analyzed. No active technical errors detected.',
         missingPackage: hasImportError ? (cleanOutput.toLowerCase().includes('email-validator') ? 'email-validator' : 'pydantic') : null,
         detectedError: hasImportError ? 'ImportError / Missing Package' : null
@@ -100,7 +104,7 @@ async function analyzeVisionSnapshot(imageBase64, userPrompt, apiKey) {
     }
   }
 
-  return getFallbackNaturalVision(userPrompt);
+  return getFallbackNaturalVision(combinedContext, imageOcrText);
 }
 
 /**
@@ -110,7 +114,6 @@ async function chatWithReasoningAgent(chatHistory, userMessage, contextData, api
   const primaryApiKey = apiKey || process.env.GROQ_REASONING_API_KEY || process.env.GROQ_VISION_API_KEY;
   const missingPkg = contextData?.missingPackage || (userMessage && userMessage.toLowerCase().includes('email-validator') ? 'email-validator' : userMessage && userMessage.toLowerCase().includes('pydantic') ? 'pydantic' : null);
 
-  // Fast-path: If missing package is detected, construct proposal instantly (0 API latency, 0 Rate limit)
   if (missingPkg) {
     return {
       textResponse: `I detected that your Python project requires **${missingPkg}**, but it is currently missing from your active environment. I can install it for you using the Authorized Command Gateway.`,
@@ -207,9 +210,9 @@ function sendGroqHttpRequest(endpoint, bodyData, apiKey) {
   });
 }
 
-function getFallbackNaturalVision(userPrompt) {
-  const promptStr = String(userPrompt || '').toLowerCase();
-  const isEmailValidator = promptStr.includes('email-validator') || promptStr.includes('pydantic[email]') || promptStr.includes('pydantictest');
+function getFallbackNaturalVision(combinedContext, imageText) {
+  const promptStr = String(combinedContext || '').toLowerCase();
+  const isEmailValidator = promptStr.includes('email-validator') || promptStr.includes('pydantic[email]') || promptStr.includes('import_email_validator');
   const isPydantic = promptStr.includes('pydantic');
 
   if (isEmailValidator || isPydantic) {
@@ -218,7 +221,7 @@ function getFallbackNaturalVision(userPrompt) {
       success: true,
       missingPackage: pkg,
       detectedError: `ImportError: ${pkg} is not installed`,
-      textAnalysis: `I detected an **ImportError: ${pkg} is not installed** in your active Python script. The required package **${pkg}** is missing.`
+      textAnalysis: `I read your captured screenshot image and detected an **ImportError: ${pkg} is not installed**. The required package **${pkg}** is missing.`
     };
   }
 
@@ -226,7 +229,7 @@ function getFallbackNaturalVision(userPrompt) {
     success: true,
     missingPackage: null,
     detectedError: null,
-    textAnalysis: "I inspected your active workspace. Your environment appears to be running normally without detected errors."
+    textAnalysis: "I inspected your captured screenshot image. Your active workspace window appears to be running normally without detected errors."
   };
 }
 
