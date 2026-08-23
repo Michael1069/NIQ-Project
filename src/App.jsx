@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
-import WorkspaceDetector from './components/WorkspaceDetector';
-import SnapshotCard from './components/SnapshotCard';
 import ChatContainer from './components/ChatContainer';
-import ResolutionConfirmation from './components/ResolutionConfirmation';
 import SettingsModal from './components/SettingsModal';
 import './styles/niq-theme.css';
 
@@ -73,7 +70,7 @@ export default function App() {
     }
   };
 
-  // Step 2: Confirm snapshot & trigger Vision Model (Natural Text)
+  // Step 2: Confirm snapshot & trigger Vision Analysis
   const handleConfirmSnapshot = async () => {
     if (!snapshot) return;
     setIsAnalyzing(true);
@@ -89,7 +86,6 @@ export default function App() {
 
         setSession(res.session);
 
-        // Auto execute if policy is AUTO and action exists
         if (policy === 'AUTO' && res.reasoning?.actionProposal) {
           handleExecuteCommand(res.reasoning.actionProposal);
         }
@@ -150,6 +146,8 @@ export default function App() {
       const sess = await window.electronAPI.clearSession();
       setSession(sess);
     }
+    setSnapshot(null);
+    setIsConfirmed(false);
     handleScanWorkspace();
   };
 
@@ -175,39 +173,22 @@ export default function App() {
         onCloseSidebar={handleCloseSidebar}
       />
 
-      <div className="niq-content-area">
-        {/* Step 1: Workspace Scanner */}
-        <WorkspaceDetector
-          isIdle={isIdle}
-          onScanWorkspace={handleScanWorkspace}
-          isScanning={isScanning}
-        />
-
-        {/* Step 2: Captured Workspace Context */}
-        <SnapshotCard
-          snapshot={snapshot}
-          onConfirmSnapshot={handleConfirmSnapshot}
-          isAnalyzing={isAnalyzing}
-          onRetake={handleScanWorkspace}
-        />
-
-        {/* Step 3: Interactive Multi-Turn Chat Container */}
+      {/* Single Unified Chat Stream Container */}
+      <div className="niq-content-area" style={{ padding: 10, display: 'flex', flexDirection: 'column' }}>
         <ChatContainer
           session={session}
           onSendMessage={handleSendMessage}
           onExecuteCommand={handleExecuteCommand}
+          onScanWorkspace={handleScanWorkspace}
+          onConfirmSnapshot={handleConfirmSnapshot}
+          onConfirmResolved={handleConfirmResolved}
+          onReinvestigate={handleReinvestigate}
+          snapshot={snapshot}
+          isScanning={isScanning}
           isAnalyzing={isAnalyzing}
+          isConfirmed={isConfirmed}
           policy={policy}
         />
-
-        {/* Step 4: Resolution Confirmation */}
-        {session?.messages?.some(m => m.actionProposal || m.executionResult) && (
-          <ResolutionConfirmation
-            onConfirmResolved={handleConfirmResolved}
-            onReinvestigate={handleReinvestigate}
-            isConfirmed={isConfirmed}
-          />
-        )}
       </div>
 
       <SettingsModal
