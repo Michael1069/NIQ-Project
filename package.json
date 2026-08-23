@@ -25,8 +25,7 @@
       ".env"
     ],
     "win": {
-      "target": "nsis",
-      "icon": "public/icon.ico"
+      "target": ["nsis", "portable"]
     },
     "nsis": {
       "oneClick": false,
