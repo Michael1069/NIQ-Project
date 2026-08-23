@@ -26,16 +26,27 @@ app.whenReady().then(() => {
   createSidebarWindow();
   createSystemTray();
 
-  try {
-    globalShortcut.register('CommandOrControl+Alt+H', () => {
-      toggleSidebar();
-    });
-    globalShortcut.register('Alt+Shift+H', () => {
-      toggleSidebar();
-    });
-  } catch (err) {
-    console.error('Failed to register global hotkey:', err);
-  }
+  // Register robust suite of global hotkeys (Ctrl+Alt+H, Alt+Shift+H, Ctrl+Shift+H, F9, Alt+H)
+  const shortcutsToRegister = [
+    'CommandOrControl+Alt+H',
+    'Alt+Shift+H',
+    'CommandOrControl+Shift+H',
+    'F9',
+    'Alt+H',
+    'CommandOrControl+Alt+A'
+  ];
+
+  shortcutsToRegister.forEach(shortcut => {
+    try {
+      const isReg = globalShortcut.register(shortcut, () => {
+        console.log(`[GlobalHotkey] Triggered by shortcut: ${shortcut}`);
+        toggleSidebar();
+      });
+      console.log(`[GlobalHotkey] Registered '${shortcut}': ${isReg ? 'SUCCESS' : 'FAILED (Key reserved by another app)'}`);
+    } catch (err) {
+      console.error(`[GlobalHotkey] Failed to register '${shortcut}':`, err.message);
+    }
+  });
 
   ipcMain.handle('capture-workspace', async () => {
     const snapshot = await captureActiveWorkspace();
@@ -55,7 +66,6 @@ app.whenReady().then(() => {
       detectedError: result.detectedError
     });
 
-    // Request single reasoning turn
     const session = sessionStore.getSession();
     const reasoning = await chatWithReasoningAgent(
       session.messages,
